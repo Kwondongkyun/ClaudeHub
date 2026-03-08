@@ -8,6 +8,8 @@ struct MainView: View {
     @State private var showSettings = false
     @State private var deleteTargetSessionId: String?
     @State private var didInitialScan = false
+    @State private var hoveredSessionId: String?
+    @State private var hoveredProjectId: String?
 
     private var selectedProject: Project? {
         filteredProjects.first { $0.id == selectedProjectId }
@@ -34,6 +36,14 @@ struct MainView: View {
         selectedProject?.sortedSessions ?? []
     }
 
+    private var pinnedSessions: [Session] {
+        displaySessions.filter { $0.isPinned }
+    }
+
+    private var unpinnedSessions: [Session] {
+        displaySessions.filter { !$0.isPinned }
+    }
+
     private var totalSessionCount: Int {
         scanner.projects.reduce(0) { $0 + $1.sessionCount }
     }
@@ -50,11 +60,10 @@ struct MainView: View {
                 mainPage
             }
         }
-        .frame(width: 560, height: 480)
+        .frame(width: 640, height: 520)
         .onAppear {
             guard !didInitialScan else { return }
             didInitialScan = true
-            // 패널이 완전히 열린 후 스캔 시작 (딜레이 필수)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 Task {
                     await scanner.scan()
@@ -73,49 +82,23 @@ struct MainView: View {
 
     private var mainPage: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-
-                TextField("세션 검색...", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Divider().frame(height: 16)
-
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
+            header
             Divider()
 
-            // Content: Sidebar + Sessions
             HStack(spacing: 0) {
                 sidebar
-                    .frame(width: 168)
+                    .frame(width: 190)
 
                 Divider()
 
-                sessionList
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    if let project = selectedProject {
+                        projectHeader(project)
+                        Divider()
+                    }
+                    sessionList
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
 
             Divider()
@@ -123,58 +106,151 @@ struct MainView: View {
         }
     }
 
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                .font(.system(size: 14))
+                .foregroundColor(.accentColor)
+
+            Text("ClaudeHub")
+                .font(.system(size: 13, weight: .semibold))
+
+            Spacer()
+
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+
+                TextField("검색...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .frame(width: 120)
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(.textBackgroundColor).opacity(0.5))
+            )
+
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
     // MARK: - Sidebar
 
     private var sidebar: some View {
         ScrollView {
-            LazyVStack(spacing: 2) {
+            LazyVStack(spacing: 1) {
                 ForEach(filteredProjects) { project in
                     sidebarRow(project: project)
                 }
             }
             .padding(.vertical, 4)
         }
+        .background(Color(.windowBackgroundColor).opacity(0.3))
     }
 
     private func sidebarRow(project: Project) -> some View {
         let isSelected = selectedProjectId == project.id
-        let pathText = shortenHomePath(project.fullPath)
+        let isHovered = hoveredProjectId == project.id && !isSelected
 
         return HStack(spacing: 8) {
-            Image(systemName: "folder.fill")
+            Image(systemName: isSelected ? "folder.fill" : "folder")
                 .font(.system(size: 12))
-                .foregroundStyle(isSelected ? .white : .secondary)
+                .foregroundColor(isSelected ? .white : .accentColor)
+                .frame(width: 16)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(project.displayName)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? .white : .primary)
                     .lineLimit(1)
 
-                Text(pathText)
+                Text(smartPath(project.fullPath))
                     .font(.system(size: 9))
                     .foregroundColor(isSelected ? .white.opacity(0.6) : .gray)
                     .lineLimit(1)
                     .truncationMode(.head)
-
-                Text("\(project.sessionCount)개 세션")
-                    .font(.system(size: 10))
-                    .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
             }
 
-            Spacer()
+            Spacer(minLength: 4)
+
+            Text("\(project.sessionCount)")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(isSelected ? .white : .secondary)
+                .frame(minWidth: 20)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? Color.white.opacity(0.2) : Color(.separatorColor).opacity(0.15))
+                )
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? Color.accentColor : .clear)
+            RoundedRectangle(cornerRadius: 7)
+                .fill(isSelected ? Color.accentColor : isHovered ? Color(.separatorColor).opacity(0.1) : .clear)
         )
         .contentShape(Rectangle())
         .onTapGesture {
             selectedProjectId = project.id
         }
+        .onHover { h in
+            hoveredProjectId = h ? project.id : nil
+        }
         .padding(.horizontal, 4)
+    }
+
+    // MARK: - Project Header (우측 상단)
+
+    private func projectHeader(_ project: Project) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(project.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+
+                Text(shortenHomePath(project.fullPath))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+            }
+
+            Spacer()
+
+            Text("\(project.sessionCount)개 세션")
+                .font(.system(size: 10, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(.windowBackgroundColor).opacity(0.3))
     }
 
     // MARK: - Session List
@@ -202,71 +278,118 @@ struct MainView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 4) {
-                        ForEach(displaySessions) { session in
-                            if deleteTargetSessionId == session.id {
-                                deleteConfirmRow(session: session)
-                            } else {
-                                sessionCard(session: session)
+                    LazyVStack(spacing: 0) {
+                        // 핀된 세션 섹션
+                        if !pinnedSessions.isEmpty {
+                            sectionHeader(title: "고정됨", icon: "pin.fill", color: .orange)
+                            ForEach(pinnedSessions) { session in
+                                sessionRow(session: session)
+                            }
+                        }
+
+                        // 일반 세션 섹션
+                        if !unpinnedSessions.isEmpty {
+                            if !pinnedSessions.isEmpty {
+                                sectionHeader(title: "최근", icon: "clock", color: .secondary)
+                            }
+                            ForEach(unpinnedSessions) { session in
+                                sessionRow(session: session)
                             }
                         }
                     }
-                    .padding(6)
+                    .padding(.vertical, 4)
                 }
             }
         }
     }
 
-    // MARK: - Session Card
+    private func sectionHeader(title: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9))
+                .foregroundColor(color)
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
 
-    private func sessionCard(session: Session) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 6) {
-                if session.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.orange)
-                }
-                Text(session.title)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-            }
+    // MARK: - Session Row
 
-            HStack(spacing: 6) {
-                if let branch = session.gitBranch {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 9))
-                        Text(branch)
-                            .font(.system(size: 11))
-                    }
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Text(session.relativeTime)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+    private func sessionRow(session: Session) -> some View {
+        Group {
+            if deleteTargetSessionId == session.id {
+                deleteConfirmRow(session: session)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+            } else {
+                sessionCard(session: session)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+    }
+
+    private func sessionCard(session: Session) -> some View {
+        let isHovered = hoveredSessionId == session.id
+
+        return HStack(spacing: 10) {
+            // 좌측 컬러 바
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(session.isPinned ? Color.orange : Color.accentColor.opacity(0.4))
+                .frame(width: 3)
+                .padding(.vertical, 4)
+
+            VStack(alignment: .leading, spacing: 5) {
+                // 1줄: 제목 + 시간
+                HStack(alignment: .top) {
+                    Text(session.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Text(session.relativeTime)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+
+                // 2줄: 설명
+                Text(session.description ?? "설명 없음")
+                    .font(.system(size: 11))
+                    .lineLimit(2)
+                    .foregroundStyle(session.description != nil ? .secondary : .quaternary)
+
+                // 3줄: 브랜치
+                HStack(spacing: 3) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 8))
+                    Text(session.gitBranch ?? "브랜치 없음")
+                        .font(.system(size: 10))
+                }
+                .foregroundStyle(session.gitBranch != nil ? .tertiary : .quaternary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(.windowBackgroundColor).opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(.separatorColor).opacity(0.3), lineWidth: 0.5)
+                .fill(isHovered ? Color.accentColor.opacity(0.06) : .clear)
         )
         .contentShape(Rectangle())
+        .onHover { hovering in
+            hoveredSessionId = hovering ? session.id : nil
+        }
         .onTapGesture {
             TerminalLauncher.resumeSession(
                 sessionId: session.id,
-                projectPath: selectedProject?.fullPath ?? session.projectPath,
+                projectPath: session.projectPath.isEmpty ? (selectedProject?.fullPath ?? "") : session.projectPath,
                 terminal: settings.terminal
             )
         }
@@ -302,11 +425,11 @@ struct MainView: View {
     private func deleteConfirmRow(session: Session) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("세션 삭제")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("삭제하시겠습니까?")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.red)
-                Text("'\(session.title)'")
-                    .font(.system(size: 11))
+                Text(session.title)
+                    .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -319,7 +442,7 @@ struct MainView: View {
                 Text("취소")
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 4)
                     .background(Color(.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
@@ -331,19 +454,23 @@ struct MainView: View {
                 deleteTargetSessionId = nil
             } label: {
                 Text("삭제")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 4)
                     .background(Color.red, in: RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.red.opacity(0.08))
+                .fill(Color.red.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.red.opacity(0.15), lineWidth: 0.5)
+                )
         )
     }
 
@@ -351,19 +478,24 @@ struct MainView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Text("전체 \(totalSessionCount)개 세션")
-                .font(.system(size: 11))
+            Text("\(totalSessionCount) 세션")
+                .font(.system(size: 10, design: .rounded))
                 .foregroundStyle(.secondary)
 
             if totalPinnedCount > 0 {
-                Text("· 핀 \(totalPinnedCount)개")
-                    .font(.system(size: 11))
+                Text("·")
+                    .foregroundStyle(.quaternary)
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 7))
+                    .foregroundStyle(.orange.opacity(0.7))
+                Text("\(totalPinnedCount)")
+                    .font(.system(size: 10, design: .rounded))
                     .foregroundStyle(.secondary)
             }
 
             if scanner.isLoading {
                 ProgressView()
-                    .controlSize(.small)
+                    .controlSize(.mini)
             }
 
             Spacer()
@@ -373,9 +505,11 @@ struct MainView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
             .disabled(scanner.isLoading)
+            .help("새로고침")
 
             Divider().frame(height: 12)
 
@@ -383,13 +517,13 @@ struct MainView: View {
                 NSApplication.shared.terminate(nil)
             } label: {
                 Text("종료")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.red)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
     }
 
     // MARK: - Settings Page
@@ -457,6 +591,22 @@ struct MainView: View {
 
     // MARK: - Helpers
 
+    /// 사이드바용: 마지막 2세그먼트만 표시 (~/Desktop/Claude-Code)
+    private func smartPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var display = path
+        if display.hasPrefix(home) {
+            display = "~" + display.dropFirst(home.count)
+        }
+        let segments = display.components(separatedBy: "/").filter { !$0.isEmpty }
+        if segments.count <= 3 {
+            return display
+        }
+        // ~/...마지막2개
+        return "~/\(segments.suffix(2).joined(separator: "/"))"
+    }
+
+    /// 프로젝트 헤더용: 전체 경로 (~로 시작)
     private func shortenHomePath(_ path: String) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         if path.hasPrefix(home) {

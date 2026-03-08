@@ -4,6 +4,7 @@ struct Session: Identifiable, Hashable {
     let id: String
     let projectPath: String
     let title: String
+    let description: String?
     let lastModified: Date
     let gitBranch: String?
     let claudeVersion: String?

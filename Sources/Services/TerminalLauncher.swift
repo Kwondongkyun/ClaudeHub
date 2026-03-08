@@ -40,7 +40,9 @@ enum TerminalLauncher {
         projectPath: String,
         terminal: TerminalApp
     ) {
-        let command = "unset CLAUDECODE && cd \(shellEscape(projectPath)) && claude --resume \(shellEscape(sessionId))"
+        let ep = shellEscape(projectPath)
+        let ei = shellEscape(sessionId)
+        let command = "unset CLAUDECODE && cd \(ep) 2>/dev/null; claude --resume \(ei)"
 
         switch terminal {
         case .terminal:
@@ -83,7 +85,7 @@ enum TerminalLauncher {
     private static func launchViaShellScript(command: String, projectPath: String, appName: String) {
         let scriptPath = "\(projectPath)/.claudehub_resume.sh"
         // 스크립트 실행 후 자기 자신 삭제
-        let scriptContent = "#!/bin/bash\nrm -f \(shellEscape(scriptPath))\n\(command)\n"
+        let scriptContent = "#!/bin/bash\nrm -f \(shellEscape(scriptPath))\nclear\n\(command)\n"
 
         do {
             try scriptContent.write(toFile: scriptPath, atomically: true, encoding: .utf8)
