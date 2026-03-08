@@ -65,9 +65,6 @@ private enum ScanHelper {
             guard fm.fileExists(atPath: dir.path, isDirectory: &isDir),
                   isDir.boolValue else { continue }
 
-            let fullPath = folderNameToPath(folderName)
-            let displayName = extractDisplayName(from: fullPath)
-
             guard let files = try? fm.contentsOfDirectory(
                 at: dir,
                 includingPropertiesForKeys: [.contentModificationDateKey],
@@ -89,6 +86,11 @@ private enum ScanHelper {
             }
 
             guard !sessions.isEmpty else { continue }
+
+            // JSONL의 cwd에서 실제 경로를 가져옴 (폴더명 복원은 fallback)
+            let cwdPath = sessions.first(where: { !$0.projectPath.isEmpty })?.projectPath
+            let fullPath = cwdPath ?? folderNameToPath(folderName)
+            let displayName = extractDisplayName(from: fullPath)
 
             newProjects.append(Project(
                 id: folderName,
