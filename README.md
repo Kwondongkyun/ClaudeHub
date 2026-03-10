@@ -4,6 +4,8 @@ macOS menu bar app that shows all your Claude Code sessions across every project
 
 ![macOS](https://img.shields.io/badge/macOS-13.0+-blue) ![Swift](https://img.shields.io/badge/Swift-5.9-orange) ![License](https://img.shields.io/badge/license-MIT-green)
 
+![ClaudeHub Screenshot](docs/claudehub-screenshot.png)
+
 ## Why
 
 Using Claude Code across multiple projects means switching directories and running `/resume` to find the right session every time. ClaudeHub puts all sessions from every project in one place — click a session, and it opens in your terminal, ready to go.
