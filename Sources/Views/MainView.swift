@@ -44,6 +44,75 @@ struct MainView: View {
         displaySessions.filter { !$0.isPinned }
     }
 
+    /// 가장 최근에 접속한 세션 ID (정렬 기준 첫 번째)
+    private var mostRecentSessionId: String? {
+        unpinnedSessions.first?.id
+    }
+
+    private enum TimeGroup: CaseIterable {
+        case pinned, today, yesterday, pastWeek, older
+
+        var title: String {
+            switch self {
+            case .pinned: return "고정됨"
+            case .today: return "오늘"
+            case .yesterday: return "어제"
+            case .pastWeek: return "지난 7일"
+            case .older: return "이전"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .pinned: return "pin.fill"
+            case .today: return "sun.max"
+            case .yesterday: return "clock.arrow.circlepath"
+            case .pastWeek: return "calendar"
+            case .older: return "archivebox"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .pinned: return .orange
+            default: return .secondary
+            }
+        }
+    }
+
+    private var groupedSessions: [(TimeGroup, [Session])] {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday)!
+        let startOfWeek = calendar.date(byAdding: .day, value: -7, to: startOfToday)!
+
+        var groups: [TimeGroup: [Session]] = [:]
+
+        if !pinnedSessions.isEmpty {
+            groups[.pinned] = pinnedSessions
+        }
+
+        for session in unpinnedSessions {
+            let group: TimeGroup
+            if session.lastModified >= startOfToday {
+                group = .today
+            } else if session.lastModified >= startOfYesterday {
+                group = .yesterday
+            } else if session.lastModified >= startOfWeek {
+                group = .pastWeek
+            } else {
+                group = .older
+            }
+            groups[group, default: []].append(session)
+        }
+
+        return TimeGroup.allCases.compactMap { group in
+            guard let sessions = groups[group], !sessions.isEmpty else { return nil }
+            return (group, sessions)
+        }
+    }
+
     private var totalSessionCount: Int {
         scanner.projects.reduce(0) { $0 + $1.sessionCount }
     }
@@ -279,20 +348,9 @@ struct MainView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        // 핀된 세션 섹션
-                        if !pinnedSessions.isEmpty {
-                            sectionHeader(title: "고정됨", icon: "pin.fill", color: .orange)
-                            ForEach(pinnedSessions) { session in
-                                sessionRow(session: session)
-                            }
-                        }
-
-                        // 일반 세션 섹션
-                        if !unpinnedSessions.isEmpty {
-                            if !pinnedSessions.isEmpty {
-                                sectionHeader(title: "최근", icon: "clock", color: .secondary)
-                            }
-                            ForEach(unpinnedSessions) { session in
+                        ForEach(groupedSessions, id: \.0) { group, sessions in
+                            sectionHeader(title: group.title, icon: group.icon, color: group.color)
+                            ForEach(sessions) { session in
                                 sessionRow(session: session)
                             }
                         }
@@ -344,7 +402,7 @@ struct MainView: View {
                 .frame(width: 3)
                 .padding(.vertical, 4)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 // 1줄: 제목 + 시간
                 HStack(alignment: .top) {
                     Text(session.title)
@@ -359,24 +417,17 @@ struct MainView: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                // 2줄: 설명
-                Text(session.description ?? "설명 없음")
-                    .font(.system(size: 11))
-                    .lineLimit(2)
-                    .foregroundStyle(session.description != nil ? .secondary : .quaternary)
-
-                // 3줄: 브랜치
-                HStack(spacing: 3) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 8))
-                    Text(session.gitBranch ?? "브랜치 없음")
+                // 2줄: 브랜치 · 메시지 수 (있는 것만 표시)
+                let infoParts = sessionInfoParts(session)
+                if !infoParts.isEmpty {
+                    Text(infoParts)
                         .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
                 }
-                .foregroundStyle(session.gitBranch != nil ? .tertiary : .quaternary)
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8)
@@ -418,6 +469,17 @@ struct MainView: View {
                 Label("세션 삭제", systemImage: "trash")
             }
         }
+    }
+
+    private func sessionInfoParts(_ session: Session) -> String {
+        var parts: [String] = []
+        if let branch = session.gitBranch {
+            parts.append(branch)
+        }
+        if session.messageCount > 0 {
+            parts.append("\(session.messageCount) messages")
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Delete Confirm

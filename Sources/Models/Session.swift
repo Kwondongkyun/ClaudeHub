@@ -8,6 +8,7 @@ struct Session: Identifiable, Hashable {
     let lastModified: Date
     let gitBranch: String?
     let claudeVersion: String?
+    let messageCount: Int
     var isPinned: Bool
 
     var relativeTime: String {
