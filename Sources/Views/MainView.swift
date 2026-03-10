@@ -479,6 +479,12 @@ struct MainView: View {
         if session.messageCount > 0 {
             parts.append("\(session.messageCount) messages")
         }
+        if let dur = session.formattedDuration {
+            parts.append(dur)
+        }
+        if let tok = session.formattedTokens {
+            parts.append(tok)
+        }
         return parts.joined(separator: " · ")
     }
 

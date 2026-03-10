@@ -87,25 +87,63 @@ enum SessionParser {
         // sessionId가 없으면 실제 세션이 아님 (file-history-snapshot 등)
         guard let fileSessionId = sessionId else { return nil }
 
-        // 전체 파일 읽기 (메시지 카운트 + custom-title 검색)
+        // 전체 파일 읽기 (메시지 카운트 + custom-title + 토큰 + 시간)
         handle.seek(toFileOffset: 0)
         let fullData = handle.readDataToEndOfFile()
-        let messageCount = countOccurrences(of: "\"role\"", in: fullData)
 
-        // custom-title이 첫 64KB에 없었으면 전체에서 마지막 것 검색
-        if customTitle == nil, let fullContent = String(data: fullData, encoding: .utf8) {
-            for line in fullContent.components(separatedBy: "\n").reversed() {
+        var messageCount = 0
+        var totalInputTokens = 0
+        var totalOutputTokens = 0
+        var minTimestamp: Date?
+        var maxTimestamp: Date?
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        if let fullContent = String(data: fullData, encoding: .utf8) {
+            for line in fullContent.components(separatedBy: "\n") {
                 guard !line.isEmpty,
                       let ld = line.data(using: .utf8),
-                      let json = try? JSONSerialization.jsonObject(with: ld) as? [String: Any],
-                      let type = json["type"] as? String,
-                      type == "custom-title",
-                      let ct = json["customTitle"] as? String,
-                      !ct.isEmpty
+                      let json = try? JSONSerialization.jsonObject(with: ld) as? [String: Any]
                 else { continue }
-                customTitle = ct
-                break
+
+                // 메시지 카운트
+                if json["message"] is [String: Any], line.contains("\"role\"") {
+                    messageCount += 1
+                }
+
+                // custom-title (마지막이 최종)
+                if let type = json["type"] as? String,
+                   type == "custom-title",
+                   let ct = json["customTitle"] as? String,
+                   !ct.isEmpty {
+                    customTitle = ct
+                }
+
+                // 타임스탬프 min/max
+                if let ts = json["timestamp"] as? String,
+                   let date = isoFormatter.date(from: ts) {
+                    if minTimestamp == nil || date < minTimestamp! { minTimestamp = date }
+                    if maxTimestamp == nil || date > maxTimestamp! { maxTimestamp = date }
+                }
+
+                // 토큰 합산 (assistant 메시지만)
+                if let type = json["type"] as? String, type == "assistant",
+                   let message = json["message"] as? [String: Any],
+                   let usage = message["usage"] as? [String: Any] {
+                    totalInputTokens += (usage["input_tokens"] as? Int ?? 0)
+                        + (usage["cache_creation_input_tokens"] as? Int ?? 0)
+                        + (usage["cache_read_input_tokens"] as? Int ?? 0)
+                    totalOutputTokens += usage["output_tokens"] as? Int ?? 0
+                }
             }
+        }
+
+        let duration: TimeInterval?
+        if let min = minTimestamp, let max = maxTimestamp {
+            duration = max.timeIntervalSince(min)
+        } else {
+            duration = nil
         }
 
         let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
@@ -146,6 +184,9 @@ enum SessionParser {
             gitBranch: gitBranch,
             claudeVersion: version,
             messageCount: messageCount,
+            duration: duration,
+            totalInputTokens: totalInputTokens,
+            totalOutputTokens: totalOutputTokens,
             isPinned: isPinned
         )
     }
@@ -193,15 +234,4 @@ enum SessionParser {
         return result
     }
 
-    /// Data에서 특정 문자열 패턴 출현 횟수 카운트
-    private static func countOccurrences(of pattern: String, in data: Data) -> Int {
-        guard let patternData = pattern.data(using: .utf8) else { return 0 }
-        var count = 0
-        var searchStart = data.startIndex
-        while let range = data.range(of: patternData, in: searchStart..<data.endIndex) {
-            count += 1
-            searchStart = range.upperBound
-        }
-        return count
-    }
 }

@@ -15,15 +15,26 @@ Using Claude Code across multiple projects means switching directories and runni
 - **All sessions, one view** — scans `~/.claude/projects/` and lists every session grouped by project
 - **One-click resume** — click a session card to open it in your preferred terminal
 - **Multi-terminal support** — Terminal.app, iTerm2, Warp, Ghostty
+- **Time grouping** — sessions grouped by Today / Yesterday / Past 7 days / Older
+- **Session metadata** — branch, message count, duration, token usage at a glance
+- **Custom title support** — displays `/rename` titles when available
 - **Search** — filter sessions by title or project name
 - **Pin sessions** — bookmark important sessions so they stay at the top
 - **Delete sessions** — remove old sessions with inline confirmation
 - **Auto-refresh** — configurable interval (5s / 10s / 30s / manual)
 - **Smart path detection** — resolves Claude's encoded folder names back to real filesystem paths
 
+## Tips
+
+> **Use `/rename` to name your sessions.** ClaudeHub displays the `/rename` title as the session name. Without it, the first user message is used as the title. Naming sessions makes them much easier to find later.
+>
+> ```
+> /rename my-feature-work
+> ```
+
 ## How it works
 
-Claude Code stores session data as JSONL files under `~/.claude/projects/<encoded-path>/`. ClaudeHub scans these directories, parses each `.jsonl` file to extract the session title (first user message), git branch, and timestamps, then displays them in a split-pane UI.
+Claude Code stores session data as JSONL files under `~/.claude/projects/<encoded-path>/`. ClaudeHub scans these directories, parses each `.jsonl` file to extract the session title, git branch, timestamps, token usage, and duration, then displays them in a split-pane UI with time-based grouping.
 
 When you click a session:
 - **Terminal.app / iTerm2** — uses AppleScript to open a new tab and run the resume command
@@ -71,10 +82,10 @@ ClaudeHub/
     ├── ClaudeHubApp.swift                # @main entry point (MenuBarExtra)
     ├── Models/
     │   ├── Project.swift                 # Project model (sorted sessions, pin count)
-    │   └── Session.swift                 # Session model (title, branch, relative time)
+    │   └── Session.swift                 # Session model (title, branch, tokens, duration)
     ├── Services/
     │   ├── AppSettings.swift             # Terminal selection, refresh interval
-    │   ├── SessionParser.swift           # JSONL parser (first 64KB for performance)
+    │   ├── SessionParser.swift           # JSONL parser (metadata, tokens, timestamps)
     │   ├── SessionScanner.swift          # Filesystem scanner with greedy path matching
     │   └── TerminalLauncher.swift        # Terminal-specific launch logic
     └── Views/
