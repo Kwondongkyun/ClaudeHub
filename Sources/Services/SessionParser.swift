@@ -42,12 +42,12 @@ enum SessionParser {
                   let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
             else { continue }
 
-            if sessionId == nil {
-                sessionId = json["sessionId"] as? String
-                cwd = json["cwd"] as? String
-                gitBranch = json["gitBranch"] as? String
-                version = json["version"] as? String
-            }
+            // 필드는 첫 라인에만 있지 않음 (permission-mode 라인엔 sessionId만 있고 cwd 없음)
+            // 각 필드를 독립적으로, 처음 발견될 때까지 찾는다
+            if sessionId == nil { sessionId = json["sessionId"] as? String }
+            if cwd == nil { cwd = json["cwd"] as? String }
+            if gitBranch == nil { gitBranch = json["gitBranch"] as? String }
+            if version == nil { version = json["version"] as? String }
 
             // custom-title: /rename으로 지정한 제목 (여러 번 rename 시 마지막이 최종)
             if let type = json["type"] as? String,
@@ -106,6 +106,11 @@ enum SessionParser {
                       let ld = line.data(using: .utf8),
                       let json = try? JSONSerialization.jsonObject(with: ld) as? [String: Any]
                 else { continue }
+
+                // cwd/gitBranch/version — 첫 64KB에서 못 찾은 경우 전체 스캔에서 보강
+                if cwd == nil { cwd = json["cwd"] as? String }
+                if gitBranch == nil { gitBranch = json["gitBranch"] as? String }
+                if version == nil { version = json["version"] as? String }
 
                 // 메시지 카운트
                 if json["message"] is [String: Any], line.contains("\"role\"") {
